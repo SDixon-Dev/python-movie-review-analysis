@@ -1,6 +1,4 @@
-
 from textblob import TextBlob
-
 
 def calculate_review_sentiment(review_text):
 

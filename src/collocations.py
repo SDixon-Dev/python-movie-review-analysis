@@ -2,11 +2,16 @@ from collections import Counter
 
 import nltk
 from nltk import bigrams
+from nltk import pos_tag
 from nltk import word_tokenize
 
 # Download the tokenizer resources required by nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
+nltk.download("averaged_perceptron_tagger_eng")
+
+#Control whether POS filtering is applied
+filter_pos = True
 
 #Stores the frequency of positive and negative bigrams in the reviews
 positive_bigrams = Counter()
@@ -14,6 +19,10 @@ negative_bigrams = Counter()
 
 #Count rows that cannot be processed
 skipped_count = 0
+
+#POS tag groups accepted by the filter
+noun_tags = {"NN", "NNS", "NNP", "NNPS"}
+adjective_tags = {"JJ", "JJR", "JJS"}
 
 with open("reviews with sentiment.tsv", "r", encoding="utf-8") as reviews:
 
@@ -34,39 +43,65 @@ with open("reviews with sentiment.tsv", "r", encoding="utf-8") as reviews:
         #Keep only tokens that contain letters or numbers
         words = [word for word in words if any(character.isalnum() for character in word)]
 
-        #Create adjacent word pairs from the review
-        review_bigrams = bigrams(words)
+        #Assign a POS tag to each token
+        tagged_words = pos_tag(words)
 
-        #Add bigrams to the appropriate sentiment counter
-        if sentiment_label == "positive":
-            positive_bigrams.update(review_bigrams)
+        #Create adjacent tagged words pairs
+        tagged_bigrams = bigrams(tagged_words)
 
-        elif sentiment_label == "negative":
-            negative_bigrams.update(review_bigrams)
+        for first_item, second_item in tagged_bigrams:
 
-        else:
-            print(
-                 f"Skipping row {line_number}: "
-                 f"unknown sentiment '{sentiment_label}'"
-            )
-            skipped_count += 1
-            continue
+            first_word, first_tag = first_item
+            second_word, second_tag = second_item
+
+            #If POS filtering is enabled, skip bigrams that do not contain at least one noun or adjective
+            noun_noun = (
+                 first_tag in noun_tags
+                and second_tag in noun_tags
+                )
+
+            adjective_noun = (
+                first_tag in adjective_tags
+                and second_tag in noun_tags
+                )
+
+            #Remove bigrams that do not match the accepted POS tag patterns
+            if filter_pos and not (noun_noun or adjective_noun):
+                continue
+
+            filtered_bigram = (first_word, second_word)            
+
+            #Add bigrams to the appropriate sentiment counter
+            if sentiment_label == "positive":
+                positive_bigrams.update([filtered_bigram])
+
+            elif sentiment_label == "negative":
+                negative_bigrams.update([filtered_bigram])
+
+            else:
+                print(
+                    f"Skipping row {line_number}: "
+                    f"unknown sentiment '{sentiment_label}'"
+                )
+                skipped_count += 1
+                break
 
         #Display progress message every 100 reviews
         if line_number % 100 == 0:
             print(f"Processed {line_number} rows")
 
-print("\nTop 40 positive collocations:\n")
+print("\nTop 40 positive POS-filtered collocations:\n")
 
 for bigram, frequency in positive_bigrams.most_common(40):
         first_word, second_word = bigram
         print(f"{first_word} {second_word} - {frequency}")
 
-print("\nTop 40 negative collocations:\n")
+print("\nTop 40 negative POS-filtered collocations:\n")
 
 for bigram, frequency in negative_bigrams.most_common(40):
         first_word, second_word = bigram
         print(f"{first_word} {second_word} - {frequency}")
 
 print("\nCollocation extraction complete.")
+print(f"POS filtering enabled: {filter_pos}")
 print(f"Skipped rows: {skipped_count}")
